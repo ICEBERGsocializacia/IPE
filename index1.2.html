@@ -1,0 +1,2174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Obsidian Graph View — Customizable</title>
+<style>
+:root {
+  --base: #1e1e2e;
+  --mantle: #181825;
+  --crust: #11111b;
+  --surface0: #313244;
+  --surface1: #45475a;
+  --surface2: #585b70;
+  --text: #cdd6f4;
+  --subtext: #a6adc8;
+  --overlay: #6c7086;
+  --accent: #89b4fa;
+  --red: #f38ba8;
+  --green: #a6e3a1;
+  --yellow: #f9e2af;
+  --mauve: #cba6f7;
+  --teal: #94e2d5;
+  --peach: #fab387;
+  --shadow: rgba(0,0,0,0.4);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100vw; height: 100vh;
+  width: 100dvw; height: 100dvh;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--base); color: var(--text);
+  position: fixed; inset: 0;
+  transition: background .3s, color .3s;
+}
+#app { position: absolute; inset: 0; }
+canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+canvas:active { cursor: grabbing; }
+
+/* TOOLBAR */
+#toolbar {
+  position: absolute; top: 16px; left: 16px;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--base) 85%, transparent);
+  border: 1px solid var(--surface0);
+  border-radius: 10px;
+  padding: 8px 10px;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+  max-width: calc(100vw - 32px);
+}
+#toolbar input {
+  background: var(--mantle); border: 1px solid var(--surface0); color: var(--text);
+  padding: 6px 10px; border-radius: 6px; outline: none; width: 180px; font-size: 13px;
+  transition: border-color .15s;
+}
+#toolbar input:focus { border-color: var(--accent); }
+#toolbar button {
+  background: var(--accent); color: var(--base); border: none; padding: 6px 12px;
+  border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+  transition: filter .15s, background .15s;
+}
+#toolbar button:hover { filter: brightness(1.15); }
+#toolbar button.ghost {
+  background: transparent; color: var(--text); border: 1px solid var(--surface0);
+}
+#toolbar button.ghost:hover { background: var(--surface0); }
+#toolbar button.danger {
+  background: transparent; color: var(--red); border: 1px solid var(--red);
+}
+#toolbar button.danger:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
+#toolbar .sep { width: 1px; height: 22px; background: var(--surface0); margin: 0 2px; }
+#saveIndicator { font-size: 11px; color: var(--overlay); padding: 0 4px; transition: color .3s; }
+#saveIndicator.saving { color: var(--yellow); }
+#saveIndicator.saved { color: var(--green); }
+
+/* PANELS */
+.panel {
+  position: absolute; top: 16px; bottom: 16px;
+  background: color-mix(in srgb, var(--mantle) 95%, transparent);
+  border: 1px solid var(--surface0); border-radius: 12px;
+  padding: 18px; overflow-y: auto;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface1) transparent;
+}
+.panel::-webkit-scrollbar { width: 8px; }
+.panel::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 4px; }
+
+#panel { right: 16px; width: 380px; max-width: calc(100vw - 32px); transform: translateX(calc(100% + 40px)); }
+#panel.open { transform: translateX(0); }
+
+#settingsPanel { left: 16px; width: 340px; max-width: calc(100vw - 32px); transform: translateX(calc(-100% - 40px)); }
+#settingsPanel.open { transform: translateX(0); }
+
+.panel h2 { font-size: 20px; margin-bottom: 12px; color: var(--accent); padding-right: 24px; outline: none; }
+.panel h2[contenteditable]:focus { background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 4px; }
+.panel .tag {
+  display: inline-block; background: var(--surface0); color: var(--yellow);
+  padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-right: 6px; margin-bottom: 6px;
+}
+.panel textarea {
+  width: 100%; min-height: 100px; resize: vertical;
+  background: var(--crust); border: 1px solid var(--surface0); color: var(--text);
+  padding: 10px; border-radius: 8px; outline: none;
+  font-family: inherit; font-size: 14px; line-height: 1.6; margin: 10px 0;
+}
+.panel textarea:focus { border-color: var(--accent); }
+.panel .close {
+  position: absolute; top: 12px; right: 12px;
+  background: transparent; border: none; color: var(--overlay); font-size: 18px; cursor: pointer;
+}
+.panel .close:hover { color: var(--red); }
+.panel .links-title {
+  margin-top: 14px; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;
+  color: var(--overlay); letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center;
+}
+.panel .link-item {
+  padding: 6px 8px; margin-top: 4px; border-radius: 6px; cursor: pointer;
+  background: var(--crust); font-size: 13px; transition: background .15s;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel .link-item:hover { background: var(--surface0); color: var(--accent); }
+.panel .link-item .unlink { color: var(--overlay); font-size: 14px; padding: 0 4px; cursor: pointer; }
+.panel .link-item .unlink:hover { color: var(--red); }
+.panel .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.panel .actions button {
+  flex: 1; min-width: 80px;
+  background: var(--surface0); color: var(--text); border: none;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; transition: background .15s;
+}
+.panel .actions button:hover { background: var(--surface1); }
+.panel .actions button.danger { color: var(--red); }
+.panel .actions button.danger:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
+.panel select, .panel input[type=text], .panel input[type=number] {
+  background: var(--crust); border: 1px solid var(--surface0); color: var(--text);
+  padding: 6px 8px; border-radius: 6px; font-size: 12px; outline: none; width: 100%;
+}
+.panel select:focus, .panel input:focus { border-color: var(--accent); }
+
+/* SETTINGS PANEL */
+.settings-tabs { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; }
+.settings-tabs .tab {
+  flex: 1; min-width: 60px;
+  background: transparent; border: 1px solid var(--surface0); color: var(--subtext);
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+  transition: all .15s;
+}
+.settings-tabs .tab:hover { background: var(--surface0); color: var(--text); }
+.settings-tabs .tab.active { background: var(--accent); color: var(--base); border-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.setting-group { margin-bottom: 16px; }
+.setting-group h4 {
+  font-size: 12px; text-transform: uppercase; color: var(--overlay);
+  letter-spacing: 1px; margin-bottom: 8px; font-weight: 600;
+}
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 6px 0;
+}
+.setting-row label { font-size: 13px; color: var(--text); flex: 1; }
+.setting-row .value { font-size: 11px; color: var(--accent); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  width: 130px; height: 4px; background: var(--surface0); border-radius: 2px; outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; background: var(--accent); border-radius: 50%; cursor: pointer;
+  transition: transform .1s;
+}
+input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px; background: var(--accent); border-radius: 50%; cursor: pointer; border: none;
+}
+input[type=checkbox] {
+  -webkit-appearance: none; appearance: none;
+  width: 36px; height: 20px; background: var(--surface0); border-radius: 10px;
+  position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0;
+}
+input[type=checkbox]::before {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; background: var(--text); border-radius: 50%;
+  transition: transform .2s;
+}
+input[type=checkbox]:checked { background: var(--accent); }
+input[type=checkbox]:checked::before { transform: translateX(16px); background: var(--base); }
+
+.theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.theme-card {
+  border: 2px solid var(--surface0); border-radius: 8px; padding: 8px;
+  cursor: pointer; transition: border-color .15s, transform .15s;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.theme-card:hover { transform: translateY(-2px); }
+.theme-card.active { border-color: var(--accent); }
+.theme-card .name { font-size: 11px; font-weight: 600; }
+.theme-card .swatches { display: flex; gap: 3px; }
+.theme-card .swatch { width: 14px; height: 14px; border-radius: 50%; }
+
+.tag-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tag-chip {
+  background: var(--crust); border: 1px solid var(--surface0);
+  padding: 4px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
+  transition: all .15s; color: var(--subtext);
+}
+.tag-chip:hover { border-color: var(--accent); color: var(--text); }
+.tag-chip.active { background: var(--accent); color: var(--base); border-color: var(--accent); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.stat-box {
+  background: var(--crust); border: 1px solid var(--surface0); border-radius: 8px;
+  padding: 10px; text-align: center;
+}
+.stat-box .num { font-size: 20px; font-weight: 700; color: var(--accent); }
+.stat-box .lbl { font-size: 10px; color: var(--overlay); text-transform: uppercase; letter-spacing: 1px; }
+
+/* MINIMAP */
+#minimap {
+  position: absolute; bottom: 16px; right: 16px;
+  width: 180px; height: 130px;
+  background: color-mix(in srgb, var(--crust) 90%, transparent);
+  border: 1px solid var(--surface0); border-radius: 8px;
+  z-index: 8; cursor: pointer;
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+#minimap canvas { width: 100%; height: 100%; cursor: pointer; }
+
+/* ZOOM */
+#zoomControls {
+  position: absolute; bottom: 160px; right: 16px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: color-mix(in srgb, var(--mantle) 90%, transparent);
+  border: 1px solid var(--surface0); border-radius: 8px;
+  padding: 4px; z-index: 8;
+  backdrop-filter: blur(6px);
+}
+#zoomControls button {
+  width: 32px; height: 32px; border: none; background: transparent;
+  color: var(--text); font-size: 16px; cursor: pointer; border-radius: 6px;
+  transition: background .15s;
+}
+#zoomControls button:hover { background: var(--surface0); }
+
+/* HINT */
+#hint {
+  position: absolute; bottom: 16px; left: 16px;
+  font-size: 12px; color: var(--overlay);
+  background: color-mix(in srgb, var(--base) 70%, transparent);
+  padding: 6px 12px; border-radius: 8px; z-index: 5;
+  backdrop-filter: blur(6px);
+}
+
+/* TOAST */
+#toast {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--surface0); color: var(--text);
+  padding: 10px 18px; border-radius: 8px; font-size: 13px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  z-index: 100; box-shadow: 0 4px 20px var(--shadow);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.success { background: var(--green); color: var(--base); }
+#toast.error { background: var(--red); color: var(--base); }
+
+/* CONTEXT MENU */
+#ctxMenu {
+  position: absolute; z-index: 200;
+  background: var(--mantle); border: 1px solid var(--surface0); border-radius: 8px;
+  padding: 4px; min-width: 180px;
+  box-shadow: 0 8px 24px var(--shadow);
+  display: none;
+}
+#ctxMenu.show { display: block; }
+#ctxMenu .item {
+  padding: 8px 12px; font-size: 13px; cursor: pointer; border-radius: 6px;
+  display: flex; align-items: center; gap: 8px; color: var(--text);
+}
+#ctxMenu .item:hover { background: var(--surface0); }
+#ctxMenu .item.danger { color: var(--red); }
+#ctxMenu .item.danger:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
+#ctxMenu .sep { height: 1px; background: var(--surface0); margin: 4px 0; }
+
+/* SHAPE / COLOR SWATCHES IN NOTE PANEL */
+.swatch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.swatch {
+  width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: transform .1s, border-color .1s;
+}
+.swatch:hover { transform: scale(1.15); }
+.swatch.active { border-color: var(--text); }
+
+@media (max-width: 700px){
+  #hint { display: none; }
+  #minimap { width: 120px; height: 90px; }
+  #zoomControls { bottom: 120px; }
+  #panel, #settingsPanel { width: auto; left: 16px; right: 16px; top: 70px; }
+  #settingsPanel { transform: translateX(calc(-100% - 40px)); }
+  #panel { transform: translateX(calc(100% + 40px)); }
+  #toolbar input { width: 100px; }
+  #toolbar { padding: 6px 8px; gap: 6px; }
+  #toolbar button { padding: 6px 8px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+
+  <div id="toolbar">
+    <button class="ghost" id="settingsBtn" title="Настройки">⚙</button>
+    <input id="search" placeholder="Поиск...">
+    <button id="addBtn">+ Заметка</button>
+    <button class="ghost" id="resetBtn" title="Сбросить вид">⟳</button>
+    <button class="ghost" id="fsBtn" title="Полный экран">⛶</button>
+    <span class="sep"></span>
+    <button class="ghost" id="exportBtn" title="Скачать JSON">💾</button>
+    <button class="ghost" id="importBtn" title="Загрузить JSON">📂</button>
+    <button class="danger" id="clearBtn" title="Сброс к демо">🗑</button>
+    <span id="saveIndicator"></span>
+    <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div id="settingsPanel" class="panel">
+    <button class="close" id="closeSettings">✕</button>
+    <h2 style="padding-right:0">⚙ Настройки</h2>
+    <div class="settings-tabs">
+      <button class="tab active" data-tab="appearance">Вид</button>
+      <button class="tab" data-tab="physics">Физика</button>
+      <button class="tab" data-tab="display">Граф</button>
+      <button class="tab" data-tab="filters">Фильтр</button>
+      <button class="tab" data-tab="data">Данные</button>
+    </div>
+    <div class="settings-body">
+
+      <!-- APPEARANCE -->
+      <div class="tab-content active" data-tab="appearance">
+        <div class="setting-group">
+          <h4>Тема</h4>
+          <div class="theme-grid" id="themeGrid"></div>
+        </div>
+        <div class="setting-group">
+          <h4>Поведение</h4>
+          <div class="setting-row">
+            <label>Автосохранение</label>
+            <input type="checkbox" id="setAutoSave">
+          </div>
+          <div class="setting-row">
+            <label>Анимация</label>
+            <input type="checkbox" id="setAnimate">
+          </div>
+          <div class="setting-row">
+            <label>Показывать мини-карту</label>
+            <input type="checkbox" id="setMinimap">
+          </div>
+        </div>
+      </div>
+
+      <!-- PHYSICS -->
+      <div class="tab-content" data-tab="physics">
+        <div class="setting-group">
+          <h4>Физика</h4>
+          <div class="setting-row">
+            <label>Включить симуляцию</label>
+            <input type="checkbox" id="setPhysicsEnabled">
+          </div>
+          <div class="setting-row">
+            <label>Отталкивание</label>
+            <input type="range" id="setRepulsion" min="0" max="1" step="0.01">
+            <span class="value" id="valRepulsion">0.15</span>
+          </div>
+          <div class="setting-row">
+            <label>Длина связи</label>
+            <input type="range" id="setLinkDist" min="40" max="400" step="10">
+            <span class="value" id="valLinkDist">140</span>
+          </div>
+          <div class="setting-row">
+            <label>Сила связи</label>
+            <input type="range" id="setLinkStr" min="0" max="0.05" step="0.001">
+            <span class="value" id="valLinkStr">0.005</span>
+          </div>
+          <div class="setting-row">
+            <label>Затухание</label>
+            <input type="range" id="setDamping" min="0.5" max="0.99" step="0.01">
+            <span class="value" id="valDamping">0.85</span>
+          </div>
+          <div class="setting-row">
+            <label>Центр. сила</label>
+            <input type="range" id="setCenter" min="0" max="0.02" step="0.001">
+            <span class="value" id="valCenter">0.002</span>
+          </div>
+        </div>
+        <div class="actions" style="display:flex;gap:8px">
+          <button class="ghost" id="settleBtn" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--surface0);background:transparent;color:var(--text);cursor:pointer;font-size:12px;font-weight:600">⚡ Устаканить</button>
+          <button class="ghost" id="resetPhysicsBtn" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--surface0);background:transparent;color:var(--text);cursor:pointer;font-size:12px;font-weight:600">↺ Сброс</button>
+        </div>
+      </div>
+
+      <!-- DISPLAY -->
+      <div class="tab-content" data-tab="display">
+        <div class="setting-group">
+          <h4>Узлы</h4>
+          <div class="setting-row">
+            <label>Показывать подписи</label>
+            <input type="checkbox" id="setShowLabels">
+          </div>
+          <div class="setting-row">
+            <label>Размер подписи</label>
+            <input type="range" id="setLabelSize" min="8" max="20" step="1">
+            <span class="value" id="valLabelSize">12</span>
+          </div>
+          <div class="setting-row">
+            <label>Масштаб узлов</label>
+            <input type="range" id="setNodeScale" min="0.5" max="2" step="0.1">
+            <span class="value" id="valNodeScale">1.0</span>
+          </div>
+          <div class="setting-row">
+            <label>Форма узлов</label>
+            <select id="setNodeShape" style="width:auto;min-width:100px">
+              <option value="circle">Круг</option>
+              <option value="square">Квадрат</option>
+              <option value="diamond">Ромб</option>
+              <option value="hexagon">Шестиугольник</option>
+              <option value="mixed">Разные</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-group">
+          <h4>Связи</h4>
+          <div class="setting-row">
+            <label>Толщина связей</label>
+            <input type="range" id="setLinkWidth" min="0.5" max="4" step="0.1">
+            <span class="value" id="valLinkWidth">1.0</span>
+          </div>
+          <div class="setting-row">
+            <label>Кривые связи</label>
+            <input type="checkbox" id="setCurved">
+          </div>
+          <div class="setting-row">
+            <label>Кривизна</label>
+            <input type="range" id="setCurveAmount" min="0" max="0.5" step="0.02">
+            <span class="value" id="valCurveAmount">0.15</span>
+          </div>
+          <div class="setting-row">
+            <label>Стрелки</label>
+            <input type="checkbox" id="setArrows">
+          </div>
+        </div>
+        <div class="setting-group">
+          <h4>Фон</h4>
+          <div class="setting-row">
+            <label>Свечение узлов</label>
+            <input type="checkbox" id="setGlow">
+          </div>
+          <div class="setting-row">
+            <label>Сетка</label>
+            <input type="checkbox" id="setGrid">
+          </div>
+          <div class="setting-row">
+            <label>Точки сетки</label>
+            <input type="checkbox" id="setGridDots">
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTERS -->
+      <div class="tab-content" data-tab="filters">
+        <div class="setting-group">
+          <h4>Фильтр по тегам</h4>
+          <div class="tag-filter" id="tagFilter">
+            <div style="color:var(--overlay);font-size:12px">Нет тегов</div>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button id="clearFilterBtn" style="flex:1;background:var(--surface0);color:var(--text);border:none;padding:8px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">Очистить фильтр</button>
+          </div>
+        </div>
+        <div class="setting-group">
+          <h4>Статистика</h4>
+          <div class="stats-grid">
+            <div class="stat-box"><div class="num" id="statNodes">0</div><div class="lbl">Заметок</div></div>
+            <div class="stat-box"><div class="num" id="statLinks">0</div><div class="lbl">Связей</div></div>
+            <div class="stat-box"><div class="num" id="statTags">0</div><div class="lbl">Тегов</div></div>
+            <div class="stat-box"><div class="num" id="statVisible">0</div><div class="lbl">Видимых</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DATA -->
+      <div class="tab-content" data-tab="data">
+        <div class="setting-group">
+          <h4>Экспорт / Импорт</h4>
+          <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="exportBtn2" style="flex:1;background:var(--surface0);color:var(--text);border:none;padding:8px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">💾 Экспорт</button>
+            <button id="importBtn2" style="flex:1;background:var(--surface0);color:var(--text);border:none;padding:8px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">📂 Импорт</button>
+          </div>
+        </div>
+        <div class="setting-group">
+          <h4>Сброс</h4>
+          <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="resetSettingsBtn" style="flex:1;background:var(--surface0);color:var(--text);border:none;padding:8px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">↺ Настройки</button>
+            <button id="clearAllBtn" style="flex:1;background:transparent;color:var(--red);border:1px solid var(--red);padding:8px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">🗑 Все данные</button>
+          </div>
+        </div>
+        <div class="setting-group">
+          <h4>Внешний вид узла</h4>
+          <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+            <label style="font-size:12px">Палитра для новых заметок</label>
+            <div class="swatch-row" id="palettePicker"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- NOTE PANEL -->
+  <div id="panel" class="panel">
+    <button class="close" id="closePanel">✕</button>
+    <div id="panelContent"></div>
+  </div>
+
+  <!-- MINIMAP -->
+  <div id="minimap"><canvas id="mmCanvas"></canvas></div>
+
+  <!-- ZOOM -->
+  <div id="zoomControls">
+    <button id="zoomIn" title="Приблизить">+</button>
+    <button id="zoomOut" title="Отдалить">−</button>
+    <button id="zoomFit" title="Вписать">⤢</button>
+  </div>
+
+  <div id="hint">Клик — открыть • Drag — сдвинуть • Колесо — зум • ПКМ — меню</div>
+  <div id="toast"></div>
+
+  <!-- CONTEXT MENU -->
+  <div id="ctxMenu"></div>
+</div>
+
+<script>
+/* =========================================================
+   THEMES
+   ========================================================= */
+const THEMES = {
+  mocha: {
+    label: 'Catppuccin Mocha',
+    colors: {
+      base:'#1e1e2e', mantle:'#181825', crust:'#11111b', surface0:'#313244',
+      surface1:'#45475a', surface2:'#585b70', text:'#cdd6f4', subtext:'#a6adc8',
+      overlay:'#6c7086', accent:'#89b4fa', red:'#f38ba8', green:'#a6e3a1',
+      yellow:'#f9e2af', mauve:'#cba6f7', teal:'#94e2d5', peach:'#fab387'
+    },
+    palette: ['#89b4fa','#f38ba8','#a6e3a1','#f9e2af','#cba6f7','#94e2d5','#fab387'],
+    isLight: false
+  },
+  latte: {
+    label: 'Catppuccin Latte',
+    colors: {
+      base:'#eff1f5', mantle:'#e6e9ef', crust:'#dce0e8', surface0:'#ccd0da',
+      surface1:'#bcc0cc', surface2:'#acb0be', text:'#4c4f69', subtext:'#5c5f77',
+      overlay:'#8c8fa1', accent:'#1e66f5', red:'#d20f39', green:'#40a02b',
+      yellow:'#df8e1d', mauve:'#8839ef', teal:'#179299', peach:'#fe640b'
+    },
+    palette: ['#1e66f5','#d20f39','#40a02b','#df8e1d','#8839ef','#179299','#fe640b'],
+    isLight: true
+  },
+  tokyonight: {
+    label: 'Tokyo Night',
+    colors: {
+      base:'#1a1b26', mantle:'#16161e', crust:'#0f0f14', surface0:'#292e42',
+      surface1:'#3b4261', surface2:'#545c7e', text:'#c0caf5', subtext:'#a9b1d6',
+      overlay:'#565f89', accent:'#7aa2f7', red:'#f7768e', green:'#9ece6a',
+      yellow:'#e0af68', mauve:'#bb9af7', teal:'#7dcfff', peach:'#ff9e64'
+    },
+    palette: ['#7aa2f7','#f7768e','#9ece6a','#e0af68','#bb9af7','#7dcfff','#ff9e64'],
+    isLight: false
+  },
+  nord: {
+    label: 'Nord',
+    colors: {
+      base:'#2e3440', mantle:'#292e39', crust:'#242933', surface0:'#3b4252',
+      surface1:'#434c5e', surface2:'#4c566a', text:'#eceff4', subtext:'#d8dee9',
+      overlay:'#7b88a1', accent:'#88c0d0', red:'#bf616a', green:'#a3be8c',
+      yellow:'#ebcb8b', mauve:'#b48ead', teal:'#8fbcbb', peach:'#d08770'
+    },
+    palette: ['#88c0d0','#bf616a','#a3be8c','#ebcb8b','#b48ead','#8fbcbb','#d08770'],
+    isLight: false
+  },
+  dracula: {
+    label: 'Dracula',
+    colors: {
+      base:'#282a36', mantle:'#21222c', crust:'#191a21', surface0:'#44475a',
+      surface1:'#6272a4', surface2:'#7b88a1', text:'#f8f8f2', subtext:'#c5c8d0',
+      overlay:'#6272a4', accent:'#bd93f9', red:'#ff5555', green:'#50fa7b',
+      yellow:'#f1fa8c', mauve:'#ff79c6', teal:'#8be9fd', peach:'#ffb86c'
+    },
+    palette: ['#bd93f9','#ff5555','#50fa7b','#f1fa8c','#ff79c6','#8be9fd','#ffb86c'],
+    isLight: false
+  },
+  solarized: {
+    label: 'Solarized Dark',
+    colors: {
+      base:'#002b36', mantle:'#073642', crust:'#001f27', surface0:'#0f4a55',
+      surface1:'#586e75', surface2:'#657b83', text:'#93a1a1', subtext:'#839496',
+      overlay:'#586e75', accent:'#268bd2', red:'#dc322f', green:'#859900',
+      yellow:'#b58900', mauve:'#6c71c4', teal:'#2aa198', peach:'#cb4b16'
+    },
+    palette: ['#268bd2','#dc322f','#859900','#b58900','#6c71c4','#2aa198','#cb4b16'],
+    isLight: false
+  }
+};
+
+let currentTheme = THEMES.mocha;
+
+function applyTheme(name){
+  const t = THEMES[name] || THEMES.mocha;
+  currentTheme = t;
+  const r = document.documentElement.style;
+  for (const [k,v] of Object.entries(t.colors)) r.setProperty('--' + k, v);
+  r.setProperty('--accent', t.colors.accent);
+  r.setProperty('--shadow', t.isLight ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.5)');
+  // update document theme color
+  document.querySelector('meta[name=theme-color]')?.remove();
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  meta.content = t.colors.base;
+  document.head.appendChild(meta);
+}
+
+/* =========================================================
+   DEFAULT SETTINGS
+   ========================================================= */
+const DEFAULT_SETTINGS = {
+  theme: 'mocha',
+  physics: {
+    enabled: true,
+    repulsion: 0.15,
+    linkDist: 140,
+    linkStr: 0.005,
+    damping: 0.85,
+    center: 0.002
+  },
+  visuals: {
+    showLabels: true,
+    labelSize: 12,
+    nodeScale: 1.0,
+    nodeShape: 'circle',
+    linkWidth: 1.0,
+    curved: false,
+    curveAmount: 0.15,
+    arrows: false,
+    glow: true,
+    grid: false,
+    gridDots: false
+  },
+  behavior: {
+    autoSave: true,
+    animate: true,
+    minimap: true
+  },
+  newColor: '#89b4fa'
+};
+
+let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+let activeTags = new Set();
+let visibleNodes = new Set();
+
+/* =========================================================
+   DEMO DATA
+   ========================================================= */
+const DEMO_DATA = {
+  version: 1,
+  nodes: [
+    { id: 'obsidian', label: 'Obsidian',  tags: ['app'], content: 'Приложение для ведения заметок в виде графа связей.', r: 14, color: '#89b4fa' },
+    { id: 'markdown', label: 'Markdown',  tags: ['формат'], content: 'Лёгкий язык разметки.', r: 10, color: '#f38ba8' },
+    { id: 'graph',    label: 'Graph View',tags: ['фича'], content: 'Визуализация связей между заметками.', r: 12, color: '#a6e3a1' },
+    { id: 'backlinks',label: 'Backlinks', tags: ['фича'], content: 'Обратные ссылки.', r: 10, color: '#f9e2af' },
+    { id: 'tags',     label: 'Теги',      tags: ['фича'], content: '#теги помогают категоризировать.', r: 10, color: '#cba6f7' },
+    { id: 'plugins',  label: 'Плагины',   tags: ['экосистема'], content: 'Тысячи community-плагинов.', r: 11, color: '#94e2d5' },
+    { id: 'canvas',   label: 'Canvas',    tags: ['фича'], content: 'Бесконечное полотно.', r: 11, color: '#fab387' },
+    { id: 'pkm',      label: 'PKM',       tags: ['концепт'], content: 'Personal Knowledge Management.', r: 12, color: '#89b4fa' },
+    { id: 'zettel',   label: 'Zettelkasten', tags: ['метод'], content: 'Метод Никласа Лумана.', r: 11, color: '#f38ba8' },
+    { id: 'md-note',  label: 'Заметка',   tags: ['базовое'], content: 'Файл .md в vault.', r: 10, color: '#a6e3a1' },
+    { id: 'vault',    label: 'Vault',     tags: ['базовое'], content: 'Папка с заметками.', r: 10, color: '#f9e2af' },
+    { id: 'sync',     label: 'Sync',      tags: ['сервис'], content: 'Синхронизация между устройствами.', r: 9, color: '#cba6f7' }
+  ],
+  links: [
+    ['obsidian','markdown'], ['obsidian','graph'], ['obsidian','plugins'],
+    ['obsidian','vault'], ['obsidian','canvas'], ['obsidian','pkm'],
+    ['graph','backlinks'], ['graph','tags'], ['graph','md-note'],
+    ['markdown','md-note'], ['md-note','vault'], ['vault','sync'],
+    ['pkm','zettel'], ['pkm','tags'], ['zettel','md-note'],
+    ['plugins','canvas'], ['tags','md-note'],
+    ['sync','vault'], ['canvas','md-note']
+  ],
+  camera: { x: 0, y: 0, scale: 1 }
+};
+
+/* =========================================================
+   STATE
+   ========================================================= */
+let nodes = [];
+let links = [];
+let nodeMap = {};
+let cam = { x: 0, y: 0, scale: 1 };
+let selected = null;
+let hoverNode = null;
+let dragNode = null, isPanning = false, panStart = null;
+let searchHighlight = null;
+
+/* =========================================================
+   PERSISTENCE
+   ========================================================= */
+const STORAGE_KEY = 'obsidian-graph-view-v2';
+const SETTINGS_KEY = 'obsidian-graph-settings-v1';
+let saveTimeout = null;
+const saveIndicator = document.getElementById('saveIndicator');
+
+function showIndicator(state){
+  if (state === 'saving'){ saveIndicator.textContent = '● сохранение…'; saveIndicator.className = 'saving'; }
+  else if (state === 'saved'){ saveIndicator.textContent = '✓ сохранено'; saveIndicator.className = 'saved';
+    setTimeout(()=>{ saveIndicator.textContent = ''; saveIndicator.className = ''; }, 1500); }
+}
+
+function serialize(){
+  return {
+    version: 2,
+    savedAt: new Date().toISOString(),
+    camera: { x: cam.x, y: cam.y, scale: cam.scale },
+    nodes: nodes.map(n=>({
+      id: n.id, label: n.label, tags: n.tags || [], content: n.content || '',
+      r: n.r, color: n.color, shape: n.shape || 'circle', pinned: !!n.pinned,
+      x: n.x, y: n.y
+    })),
+    links: links.map(l=>({ source: l.source.id, target: l.target.id }))
+  };
+}
+
+function saveToLocalStorage(){
+  if (!settings.behavior.autoSave) return;
+  try {
+    showIndicator('saving');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+    showIndicator('saved');
+  } catch (e){
+    console.error('Save failed', e);
+    showToast('Не удалось сохранить: ' + e.message, 'error');
+  }
+}
+function scheduleSave(){
+  if (!settings.behavior.autoSave) return;
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(saveToLocalStorage, 400);
+}
+function loadFromLocalStorage(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){ return null; }
+}
+function saveSettings(){
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e){}
+}
+function loadSettings(){
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    settings = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), s);
+  } catch(e){}
+}
+function deepMerge(target, src){
+  for (const k in src){
+    if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])){
+      target[k] = deepMerge(target[k] || {}, src[k]);
+    } else {
+      target[k] = src[k];
+    }
+  }
+  return target;
+}
+
+/* =========================================================
+   APPLY DATA
+   ========================================================= */
+function applyData(data){
+  if (!data || !Array.isArray(data.nodes)) throw new Error('Неверный формат данных');
+  const palette = currentTheme.palette;
+  nodes = data.nodes.map((n,i)=>({
+    id: String(n.id ?? ('n'+i)),
+    label: String(n.label ?? 'Заметка'),
+    tags: Array.isArray(n.tags) ? n.tags.slice() : [],
+    content: String(n.content ?? ''),
+    r: Number(n.r) || 10,
+    color: n.color || palette[i % palette.length],
+    shape: n.shape || 'circle',
+    pinned: !!n.pinned,
+    x: Number.isFinite(n.x) ? n.x : Math.random()*400-200,
+    y: Number.isFinite(n.y) ? n.y : Math.random()*400-200,
+    vx: 0, vy: 0
+  }));
+  nodeMap = Object.fromEntries(nodes.map(n=>[n.id, n]));
+
+  links = [];
+  if (Array.isArray(data.links)){
+    for (const l of data.links){
+      let s, t;
+      if (Array.isArray(l)) { s = l[0]; t = l[1]; }
+      else { s = l.source; t = l.target; }
+      const A = nodeMap[s], B = nodeMap[t];
+      if (A && B && A !== B) links.push({ source: A, target: B });
+    }
+  }
+
+  cam = {
+    x: Number(data.camera?.x) || 0,
+    y: Number(data.camera?.y) || 0,
+    scale: Math.max(0.25, Math.min(3, Number(data.camera?.scale) || 1))
+  };
+
+  selected = null;
+  hoverNode = null;
+  panel.classList.remove('open');
+  updateVisibility();
+  updateStats();
+  buildTagFilter();
+  buildPalettePicker();
+}
+
+/* =========================================================
+   CANVAS
+   ========================================================= */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let DPR = window.devicePixelRatio || 1;
+
+function resize(){
+  DPR = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || window.innerWidth;
+  const h = cv.clientHeight || window.innerHeight;
+  cv.width  = Math.floor(w * DPR);
+  cv.height = Math.floor(h * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  const mm = document.getElementById('mmCanvas');
+  mm.width = mm.clientWidth * DPR;
+  mm.height = mm.clientHeight * DPR;
+}
+window.addEventListener('resize', ()=>{ resize(); scheduleSave(); });
+window.addEventListener('orientationchange', resize);
+document.addEventListener('fullscreenchange', ()=>setTimeout(resize, 100));
+
+/* =========================================================
+   VISIBILITY / FILTERS
+   ========================================================= */
+function updateVisibility(){
+  visibleNodes = new Set();
+  if (activeTags.size === 0){
+    nodes.forEach(n => visibleNodes.add(n));
+  } else {
+    nodes.forEach(n => {
+      const tags = n.tags || [];
+      for (const t of tags){
+        if (activeTags.has(t)) { visibleNodes.add(n); break; }
+      }
+    });
+  }
+  updateStats();
+}
+
+function updateStats(){
+  document.getElementById('statNodes').textContent = nodes.length;
+  document.getElementById('statLinks').textContent = links.length;
+  const allTags = new Set();
+  nodes.forEach(n => (n.tags||[]).forEach(t => allTags.add(t)));
+  document.getElementById('statTags').textContent = allTags.size;
+  document.getElementById('statVisible').textContent = visibleNodes.size;
+}
+
+function buildTagFilter(){
+  const container = document.getElementById('tagFilter');
+  const allTags = new Set();
+  nodes.forEach(n => (n.tags||[]).forEach(t => allTags.add(t)));
+  if (allTags.size === 0){
+    container.innerHTML = '<div style="color:var(--overlay);font-size:12px">Нет тегов</div>';
+    return;
+  }
+  container.innerHTML = [...allTags].sort().map(t =>
+    `<div class="tag-chip${activeTags.has(t)?' active':''}" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</div>`
+  ).join('');
+  container.querySelectorAll('.tag-chip').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const t = el.dataset.tag;
+      if (activeTags.has(t)) activeTags.delete(t);
+      else activeTags.add(t);
+      el.classList.toggle('active');
+      updateVisibility();
+    });
+  });
+}
+
+function buildPalettePicker(){
+  const c = document.getElementById('palettePicker');
+  const palette = currentTheme.palette;
+  c.innerHTML = palette.map(col =>
+    `<div class="swatch${settings.newColor===col?' active':''}" style="background:${col}" data-col="${col}"></div>`
+  ).join('');
+  c.querySelectorAll('.swatch').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      settings.newColor = el.dataset.col;
+      saveSettings();
+      buildPalettePicker();
+    });
+  });
+}
+
+/* =========================================================
+   PHYSICS
+   ========================================================= */
+function tick(){
+  if (!settings.physics.enabled) return;
+  const p = settings.physics;
+  const visibleArr = nodes.filter(n => visibleNodes.has(n));
+
+  for (let i=0;i<visibleArr.length;i++){
+    const a = visibleArr[i];
+    if (a.pinned) continue;
+    for (let j=i+1;j<visibleArr.length;j++){
+      const b = visibleArr[j];
+      if (b.pinned) continue;
+      const dx = b.x-a.x, dy = b.y-a.y;
+      const d2 = dx*dx+dy*dy+0.01;
+      const d = Math.sqrt(d2);
+      const minDist = (a.r + b.r + 60) * settings.visuals.nodeScale;
+      if (d < minDist){
+        const force = (minDist - d) / d * p.repulsion;
+        const fx = dx*force, fy = dy*force;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+    }
+  }
+  for (const l of links){
+    const a = l.source, b = l.target;
+    if (a.pinned && b.pinned) continue;
+    if (!visibleNodes.has(a) || !visibleNodes.has(b)) continue;
+    const dx = b.x-a.x, dy = b.y-a.y;
+    const d = Math.sqrt(dx*dx+dy*dy)+0.001;
+    const force = (d - p.linkDist) * p.linkStr;
+    const fx = dx/d*force, fy = dy/d*force;
+    if (!a.pinned){ a.vx += fx; a.vy += fy; }
+    if (!b.pinned){ b.vx -= fx; b.vy -= fy; }
+  }
+  for (const n of nodes){
+    if (n === dragNode || n.pinned) continue;
+    if (!visibleNodes.has(n)) continue;
+    n.vx -= n.x * p.center;
+    n.vy -= n.y * p.center;
+    n.vx *= p.damping;
+    n.vy *= p.damping;
+    n.x += n.vx;
+    n.y += n.vy;
+  }
+}
+
+function settle(){
+  const oldEnabled = settings.physics.enabled;
+  settings.physics.enabled = true;
+  for (let i=0;i<200;i++) tick();
+  settings.physics.enabled = oldEnabled;
+  scheduleSave();
+}
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+function drawGrid(W, H){
+  const t = currentTheme.colors;
+  const step = 60;
+  const wx0 = screenToWorld(0, 0);
+  const wx1 = screenToWorld(W, H);
+  ctx.strokeStyle = t.surface0 + '55';
+  ctx.lineWidth = 1 / cam.scale;
+  if (settings.visuals.gridDots){
+    ctx.fillStyle = t.surface1 + '99';
+    const startX = Math.floor(wx0.x/step)*step;
+    const startY = Math.floor(wx0.y/step)*step;
+    const endX = wx1.x + step;
+    const endY = wx1.y + step;
+    for (let x=startX; x<endX; x+=step){
+      for (let y=startY; y<endY; y+=step){
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5/cam.scale, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  } else {
+    ctx.beginPath();
+    const startX = Math.floor(wx0.x/step)*step;
+    const startY = Math.floor(wx0.y/step)*step;
+    const endX = wx1.x + step;
+    const endY = wx1.y + step;
+    for (let x=startX; x<endX; x+=step){
+      ctx.moveTo(x, wx0.y);
+      ctx.lineTo(x, wx1.y);
+    }
+    for (let y=startY; y<endY; y+=step){
+      ctx.moveTo(wx0.x, y);
+      ctx.lineTo(wx1.x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+function getNodeShapePath(n, size){
+  ctx.beginPath();
+  const shape = n.shape || settings.visuals.nodeShape;
+  const s = shape === 'mixed' ? (['circle','square','diamond','hexagon'][hashStr(n.id) % 4]) : shape;
+  if (s === 'circle'){
+    ctx.arc(n.x, n.y, size, 0, Math.PI*2);
+  } else if (s === 'square'){
+    const r = size * 0.85;
+    ctx.rect(n.x - r, n.y - r, r*2, r*2);
+  } else if (s === 'diamond'){
+    const r = size * 1.15;
+    ctx.moveTo(n.x, n.y - r);
+    ctx.lineTo(n.x + r, n.y);
+    ctx.lineTo(n.x, n.y + r);
+    ctx.lineTo(n.x - r, n.y);
+    ctx.closePath();
+  } else if (s === 'hexagon'){
+    const r = size * 1.05;
+    for (let i=0;i<6;i++){
+      const a = Math.PI/3 * i - Math.PI/6;
+      const px = n.x + Math.cos(a)*r;
+      const py = n.y + Math.sin(a)*r;
+      if (i===0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+}
+
+function hashStr(s){
+  let h = 0;
+  for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function drawArrowHead(x, y, angle, color){
+  const size = 8 / cam.scale;
+  ctx.fillStyle = color;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-size, size*0.5);
+  ctx.lineTo(-size, -size*0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function render(){
+  const W = cv.clientWidth, H = cv.clientHeight;
+  const t = currentTheme.colors;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const g = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, Math.max(W,H));
+  g.addColorStop(0, t.base);
+  g.addColorStop(1, t.crust);
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.translate(W/2 + cam.x, H/2 + cam.y);
+  ctx.scale(cam.scale, cam.scale);
+
+  if (settings.visuals.grid) drawGrid(W, H);
+
+  // LINKS
+  const v = settings.visuals;
+  for (const l of links){
+    const a = l.source, b = l.target;
+    if (!visibleNodes.has(a) || !visibleNodes.has(b)) continue;
+    const active = selected && (a.id===selected.id || b.id===selected.id);
+    const color = active ? t.accent + 'e6' : t.overlay + '66';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = (active ? v.linkWidth * 1.5 : v.linkWidth) / cam.scale;
+
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const nx = dx/dist, ny = dy/dist;
+
+    const startPad = a.r * v.nodeScale + 2/cam.scale;
+    const endPad = b.r * v.nodeScale + 4/cam.scale;
+    const x1 = a.x + nx*startPad, y1 = a.y + ny*startPad;
+    const x2 = b.x - nx*endPad, y2 = b.y - ny*endPad;
+
+    if (v.curved){
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      const offset = dist * v.curveAmount;
+      const cpx = mx - ny * offset;
+      const cpy = my + nx * offset;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(cpx, cpy, x2, y2);
+      ctx.stroke();
+      if (v.arrows){
+        const ax = x2 - cpx, ay = y2 - cpy;
+        drawArrowHead(x2, y2, Math.atan2(ay, ax), color);
+      }
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      if (v.arrows){
+        drawArrowHead(x2, y2, Math.atan2(dy, dx), color);
+      }
+    }
+  }
+
+  // NODES
+  for (const n of nodes){
+    if (!visibleNodes.has(n)) continue;
+    const isHover = n === hoverNode;
+    const isSel = n === selected;
+    const isSearch = n === searchHighlight;
+    const r = n.r * v.nodeScale;
+
+    if (v.glow && (isSel || isHover || isSearch)){
+      const grad = ctx.createRadialGradient(n.x, n.y, r, n.x, n.y, r+18);
+      grad.addColorStop(0, n.color + 'cc');
+      grad.addColorStop(1, n.color + '00');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 18, 0, Math.PI*2);
+      ctx.fill();
+    }
+    if (isSearch){
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 6, 0, Math.PI*2);
+      ctx.strokeStyle = t.yellow;
+      ctx.lineWidth = 3/cam.scale;
+      ctx.stroke();
+    }
+
+    getNodeShapePath(n, r);
+    ctx.fillStyle = isSel ? n.color : n.color + 'dd';
+    ctx.fill();
+    ctx.lineWidth = 2 / cam.scale;
+    ctx.strokeStyle = isSel ? '#fff' : (n.pinned ? t.yellow : 'rgba(255,255,255,0.15)');
+    ctx.stroke();
+
+    if (n.pinned){
+      // small pin indicator
+      ctx.fillStyle = t.yellow;
+      ctx.beginPath();
+      ctx.arc(n.x + r*0.7, n.y - r*0.7, 3/cam.scale, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    if (v.showLabels){
+      ctx.fillStyle = t.text;
+      ctx.font = `${v.labelSize / cam.scale}px -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(n.label, n.x, n.y + r + 4);
+    }
+  }
+  ctx.restore();
+
+  renderMinimap();
+}
+
+/* =========================================================
+   MINIMAP
+   ========================================================= */
+const mmCanvas = document.getElementById('mmCanvas');
+const mmCtx = mmCanvas.getContext('2d');
+
+function renderMinimap(){
+  if (!settings.behavior.minimap) return;
+  const W = mmCanvas.width / DPR, H = mmCanvas.height / DPR;
+  mmCtx.setTransform(DPR,0,0,DPR,0,0);
+  mmCtx.clearRect(0,0,W,H);
+  const t = currentTheme.colors;
+
+  if (nodes.length === 0) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes){
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y > maxY) maxY = n.y;
+  }
+  const pad = 20;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const w = maxX - minX, h = maxY - minY;
+  const scale = Math.min(W/w, H/h);
+  const ox = (W - w*scale)/2 - minX*scale;
+  const oy = (H - h*scale)/2 - minY*scale;
+
+  for (const l of links){
+    mmCtx.strokeStyle = t.overlay + '55';
+    mmCtx.lineWidth = 0.5;
+    mmCtx.beginPath();
+    mmCtx.moveTo(l.source.x*scale + ox, l.source.y*scale + oy);
+    mmCtx.lineTo(l.target.x*scale + ox, l.target.y*scale + oy);
+    mmCtx.stroke();
+  }
+  for (const n of nodes){
+    if (!visibleNodes.has(n)) continue;
+    mmCtx.fillStyle = n.color;
+    mmCtx.beginPath();
+    mmCtx.arc(n.x*scale + ox, n.y*scale + oy, Math.max(1.5, n.r*scale), 0, Math.PI*2);
+    mmCtx.fill();
+  }
+  // viewport
+  const vw = (cv.clientWidth / cam.scale) * scale;
+  const vh = (cv.clientHeight / cam.scale) * scale;
+  const vx = (-cam.x / cam.scale) * scale + ox + W/2 - (cv.clientWidth/2/cam.scale)*scale;
+  const vy = (-cam.y / cam.scale) * scale + oy + H/2 - (cv.clientHeight/2/cam.scale)*scale;
+  mmCtx.strokeStyle = t.accent;
+  mmCtx.lineWidth = 1.5;
+  mmCtx.strokeRect(vx, vy, vw, vh);
+}
+
+mmCanvas.addEventListener('click', e=>{
+  const rect = mmCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const W = mmCanvas.clientWidth, H = mmCanvas.clientHeight;
+  if (nodes.length === 0) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes){
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y > maxY) maxY = n.y;
+  }
+  const pad = 20;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const w = maxX - minX, h = maxY - minY;
+  const scale = Math.min(W/w, H/h);
+  const ox = (W - w*scale)/2 - minX*scale;
+  const oy = (H - h*scale)/2 - minY*scale;
+  const wx = (mx - ox) / scale;
+  const wy = (my - oy) / scale;
+  cam.x = -wx * cam.scale;
+  cam.y = -wy * cam.scale;
+  scheduleSave();
+});
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+function loop(){
+  tick();
+  render();
+  requestAnimationFrame(loop);
+}
+
+/* =========================================================
+   COORDS
+   ========================================================= */
+function screenToWorld(sx, sy){
+  const W = cv.clientWidth, H = cv.clientHeight;
+  return {
+    x: (sx - W/2 - cam.x) / cam.scale,
+    y: (sy - H/2 - cam.y) / cam.scale
+  };
+}
+function findNodeAt(sx, sy){
+  const p = screenToWorld(sx, sy);
+  for (let i=nodes.length-1;i>=0;i--){
+    const n = nodes[i];
+    if (!visibleNodes.has(n)) continue;
+    const dx = p.x - n.x, dy = p.y - n.y;
+    const r = n.r * settings.visuals.nodeScale + 4;
+    if (dx*dx+dy*dy <= r*r) return n;
+  }
+  return null;
+}
+
+/* =========================================================
+   MOUSE
+   ========================================================= */
+cv.addEventListener('mousedown', e=>{
+  if (e.button === 2) return;
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const n = findNodeAt(mx, my);
+  if (n){
+    dragNode = n;
+    const p = screenToWorld(mx, my);
+    dragNode._off = { x: n.x - p.x, y: n.y - p.y };
+    dragNode._moved = false;
+  } else {
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+  }
+});
+cv.addEventListener('mousemove', e=>{
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  if (dragNode){
+    const p = screenToWorld(mx, my);
+    dragNode.x = p.x + dragNode._off.x;
+    dragNode.y = p.y + dragNode._off.y;
+    dragNode.vx = dragNode.vy = 0;
+    dragNode._moved = true;
+    return;
+  }
+  if (isPanning){
+    cam.x = panStart.cx + (e.clientX - panStart.x);
+    cam.y = panStart.cy + (e.clientY - panStart.y);
+    return;
+  }
+  hoverNode = findNodeAt(mx, my);
+  cv.style.cursor = hoverNode ? 'pointer' : 'grab';
+});
+window.addEventListener('mouseup', ()=>{
+  if (dragNode){
+    if (!dragNode._moved) selectNode(dragNode);
+    else scheduleSave();
+  } else if (isPanning){
+    scheduleSave();
+  }
+  dragNode = null;
+  isPanning = false;
+});
+
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const before = screenToWorld(mx, my);
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  cam.scale = Math.max(0.15, Math.min(4, cam.scale * factor));
+  const after = screenToWorld(mx, my);
+  cam.x += (after.x - before.x) * cam.scale;
+  cam.y += (after.y - before.y) * cam.scale;
+  scheduleSave();
+}, { passive: false });
+
+/* =========================================================
+   CONTEXT MENU
+   ========================================================= */
+const ctxMenu = document.getElementById('ctxMenu');
+cv.addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const n = findNodeAt(mx, my);
+
+  let items = [];
+  if (n){
+    items = [
+      { label: '📝 Открыть', action: ()=>selectNode(n) },
+      { label: n.pinned ? '📌 Открепить' : '📌 Закрепить', action: ()=>{
+        n.pinned = !n.pinned; n.vx = n.vy = 0; scheduleSave();
+      }},
+      { label: '🎨 Сменить цвет', action: ()=>{
+        const palette = currentTheme.palette;
+        const idx = palette.indexOf(n.color);
+        n.color = palette[(idx + 1) % palette.length];
+        scheduleSave();
+      }},
+      { label: '⤢ Сфокусировать', action: ()=>{
+        cam.x = -n.x * cam.scale; cam.y = -n.y * cam.scale;
+        cam.scale = Math.max(cam.scale, 1.5);
+        scheduleSave();
+      }},
+      { sep: true },
+      { label: '✕ Удалить', danger: true, action: ()=>{
+        if (!confirm(`Удалить "${n.label}"?`)) return;
+        links = links.filter(l => l.source !== n && l.target !== n);
+        nodes = nodes.filter(x => x !== n);
+        delete nodeMap[n.id];
+        if (selected === n){ selected = null; panel.classList.remove('open'); }
+        updateVisibility(); updateStats(); buildTagFilter();
+        scheduleSave();
+      }}
+    ];
+  } else {
+    const world = screenToWorld(mx, my);
+    items = [
+      { label: '➕ Новая заметка здесь', action: ()=>{
+        const label = prompt('Название:', 'Новая заметка');
+        if (!label) return;
+        const id = 'n' + Date.now();
+        const nn = {
+          id, label, tags: ['новая'], content: '', r: 10,
+          color: settings.newColor, shape: settings.visuals.nodeShape === 'mixed' ? 'circle' : settings.visuals.nodeShape,
+          pinned: false, x: world.x, y: world.y, vx: 0, vy: 0
+        };
+        nodes.push(nn); nodeMap[id] = nn;
+        updateVisibility(); updateStats(); buildTagFilter();
+        scheduleSave();
+      }},
+      { sep: true },
+      { label: '⚡ Устаканить', action: settle },
+      { label: '⟳ Сбросить вид', action: ()=>{ cam.x = 0; cam.y = 0; cam.scale = 1; scheduleSave(); } },
+      { label: '🎯 Вписать всё', action: zoomFit },
+      { sep: true },
+      { label: '⚙ Настройки', action: ()=>toggleSettings(true) }
+    ];
+  }
+
+  ctxMenu.innerHTML = items.map((it,i) => it.sep
+    ? `<div class="sep"></div>`
+    : `<div class="item${it.danger?' danger':''}" data-i="${i}">${it.label}</div>`
+  ).join('');
+  ctxMenu.querySelectorAll('.item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const idx = parseInt(el.dataset.i);
+      ctxMenu.classList.remove('show');
+      items[idx].action();
+    });
+  });
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+  ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - ctxMenu.offsetHeight - 20) + 'px';
+  ctxMenu.classList.add('show');
+});
+document.addEventListener('click', e=>{
+  if (!ctxMenu.contains(e.target)) ctxMenu.classList.remove('show');
+});
+
+/* =========================================================
+   TOUCH
+   ========================================================= */
+let touchPanStart = null, touchDragNode = null, pinchStart = null;
+cv.addEventListener('touchstart', e=>{
+  const rect = cv.getBoundingClientRect();
+  if (e.touches.length === 1){
+    const t = e.touches[0];
+    const mx = t.clientX - rect.left, my = t.clientY - rect.top;
+    const n = findNodeAt(mx, my);
+    if (n){
+      touchDragNode = n;
+      const p = screenToWorld(mx, my);
+      touchDragNode._off = { x: n.x - p.x, y: n.y - p.y };
+      touchDragNode._moved = false;
+    } else {
+      touchPanStart = { x: t.clientX, y: t.clientY, cx: cam.x, cy: cam.y };
+    }
+  } else if (e.touches.length === 2){
+    const [a,b] = e.touches;
+    pinchStart = {
+      dist: Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY),
+      scale: cam.scale,
+      cx: (a.clientX + b.clientX)/2,
+      cy: (a.clientY + b.clientY)/2,
+      camx: cam.x, camy: cam.y
+    };
+  }
+}, { passive: false });
+
+cv.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  const rect = cv.getBoundingClientRect();
+  if (touchDragNode && e.touches.length === 1){
+    const t = e.touches[0];
+    const p = screenToWorld(t.clientX - rect.left, t.clientY - rect.top);
+    touchDragNode.x = p.x + touchDragNode._off.x;
+    touchDragNode.y = p.y + touchDragNode._off.y;
+    touchDragNode.vx = touchDragNode.vy = 0;
+    touchDragNode._moved = true;
+  } else if (touchPanStart && e.touches.length === 1){
+    const t = e.touches[0];
+    cam.x = touchPanStart.cx + (t.clientX - touchPanStart.x);
+    cam.y = touchPanStart.cy + (t.clientY - touchPanStart.y);
+  } else if (pinchStart && e.touches.length === 2){
+    const [a,b] = e.touches;
+    const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    const newScale = Math.max(0.15, Math.min(4, pinchStart.scale * (dist/pinchStart.dist)));
+    const mx = pinchStart.cx - rect.left, my = pinchStart.cy - rect.top;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    const wx = (mx - W/2 - pinchStart.camx) / pinchStart.scale;
+    const wy = (my - H/2 - pinchStart.camy) / pinchStart.scale;
+    cam.scale = newScale;
+    cam.x = mx - W/2 - wx * cam.scale;
+    cam.y = my - H/2 - wy * cam.scale;
+  }
+}, { passive: false });
+
+cv.addEventListener('touchend', e=>{
+  if (touchDragNode){
+    if (!touchDragNode._moved) selectNode(touchDragNode);
+    else scheduleSave();
+    touchDragNode = null;
+  }
+  if (touchPanStart){ scheduleSave(); touchPanStart = null; }
+  if (e.touches.length < 2) pinchStart = null;
+});
+
+/* =========================================================
+   PANEL
+   ========================================================= */
+const panel = document.getElementById('panel');
+const panelContent = document.getElementById('panelContent');
+
+function neighborsOf(n){
+  return links
+    .filter(l => l.source === n || l.target === n)
+    .map(l => l.source === n ? l.target : l.source);
+}
+
+function selectNode(n){
+  selected = n;
+  renderPanel();
+  panel.classList.add('open');
+}
+
+function renderPanel(){
+  const n = selected;
+  if (!n) return;
+  const neighbors = neighborsOf(n);
+  const others = nodes.filter(x => x !== n && !neighbors.includes(x));
+  const palette = currentTheme.palette;
+  const shapes = [
+    {v:'circle', l:'● Круг'}, {v:'square', l:'■ Квадрат'},
+    {v:'diamond', l:'◆ Ромб'}, {v:'hexagon', l:'⬢ Шестиугольник'}
+  ];
+
+  panelContent.innerHTML = `
+    <h2 contenteditable="true" id="titleEdit">${escapeHtml(n.label)}</h2>
+    <div id="tagsRow">${(n.tags||[]).map(t=>`<span class="tag">#${escapeHtml(t)}</span>`).join('')}</div>
+
+    <div class="links-title" style="margin-top:14px"><span>Стиль</span></div>
+    <div class="setting-row" style="padding:2px 0">
+      <label style="font-size:12px">Цвет</label>
+      <input type="color" id="colorPicker" value="${n.color}" style="width:40px;height:24px;border:none;background:transparent;cursor:pointer;padding:0">
+    </div>
+    <div class="swatch-row">
+      ${palette.map(c=>`<div class="swatch${n.color===c?' active':''}" style="background:${c}" data-color="${c}"></div>`).join('')}
+    </div>
+    <div class="setting-row" style="padding:6px 0">
+      <label style="font-size:12px">Форма</label>
+      <select id="shapeSelect" style="width:auto">
+        ${shapes.map(s=>`<option value="${s.v}"${(n.shape||'circle')===s.v?' selected':''}>${s.l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="setting-row" style="padding:2px 0">
+      <label style="font-size:12px">Размер</label>
+      <input type="range" id="sizeRange" min="5" max="30" step="1" value="${n.r}">
+      <span class="value" id="valSize">${n.r}</span>
+    </div>
+    <div class="setting-row" style="padding:2px 0">
+      <label style="font-size:12px">📌 Закрепить</label>
+      <input type="checkbox" id="pinToggle" ${n.pinned?'checked':''}>
+    </div>
+
+    <textarea id="contentEdit" placeholder="Текст заметки...">${escapeHtml(n.content||'')}</textarea>
+    <div class="actions">
+      <button id="addTagBtn">+ Тег</button>
+      <button id="dupBtn">⧉ Дублировать</button>
+    </div>
+
+    <div class="links-title">
+      <span>Связано (${neighbors.length})</span>
+    </div>
+    <div id="linksList">
+      ${neighbors.map(m=>`
+        <div class="link-item" data-id="${m.id}">
+          <span>→ ${escapeHtml(m.label)}</span>
+          <span class="unlink" data-unlink="${m.id}" title="Удалить связь">✕</span>
+        </div>
+      `).join('') || '<div style="color:var(--overlay);font-size:13px;padding:6px 0">Нет связей</div>'}
+    </div>
+    <div class="links-title"><span>Создать связь</span></div>
+    <select id="linkSelect">
+      <option value="">— выбрать заметку —</option>
+      ${others.map(m=>`<option value="${m.id}">${escapeHtml(m.label)}</option>`).join('')}
+    </select>
+    <div class="actions">
+      <button id="deleteBtn" class="danger">Удалить заметку</button>
+    </div>
+  `;
+
+  // Title
+  const titleEdit = panelContent.querySelector('#titleEdit');
+  titleEdit.addEventListener('blur', ()=>{
+    const v = titleEdit.textContent.trim();
+    if (v && v !== n.label){ n.label = v; scheduleSave(); }
+    else if (!v){ titleEdit.textContent = n.label; }
+  });
+  titleEdit.addEventListener('keydown', e=>{
+    if (e.key === 'Enter'){ e.preventDefault(); titleEdit.blur(); }
+  });
+
+  // Color picker
+  panelContent.querySelector('#colorPicker').addEventListener('input', e=>{
+    n.color = e.target.value;
+    scheduleSave();
+    panelContent.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active', s.dataset.color === n.color));
+  });
+  panelContent.querySelectorAll('.swatch').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      n.color = el.dataset.color;
+      panelContent.querySelector('#colorPicker').value = n.color;
+      panelContent.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active', s.dataset.color === n.color));
+      scheduleSave();
+    });
+  });
+
+  // Shape
+  panelContent.querySelector('#shapeSelect').addEventListener('change', e=>{
+    n.shape = e.target.value;
+    scheduleSave();
+  });
+
+  // Size
+  const sizeRange = panelContent.querySelector('#sizeRange');
+  sizeRange.addEventListener('input', e=>{
+    n.r = parseInt(e.target.value);
+    panelContent.querySelector('#valSize').textContent = n.r;
+    scheduleSave();
+  });
+
+  // Pin
+  panelContent.querySelector('#pinToggle').addEventListener('change', e=>{
+    n.pinned = e.target.checked;
+    if (n.pinned){ n.vx = n.vy = 0; }
+    scheduleSave();
+  });
+
+  // Content
+  const contentEdit = panelContent.querySelector('#contentEdit');
+  contentEdit.addEventListener('input', ()=>{
+    n.content = contentEdit.value;
+    scheduleSave();
+  });
+
+  // Add tag
+  panelContent.querySelector('#addTagBtn').addEventListener('click', ()=>{
+    const t = prompt('Новый тег (без #):');
+    if (!t) return;
+    const clean = t.replace(/^#/, '').trim();
+    if (!clean) return;
+    n.tags = n.tags || [];
+    if (!n.tags.includes(clean)) n.tags.push(clean);
+    buildTagFilter();
+    updateStats();
+    scheduleSave();
+    renderPanel();
+  });
+
+  // Duplicate
+  panelContent.querySelector('#dupBtn').addEventListener('click', ()=>{
+    const id = 'n' + Date.now();
+    const copy = {
+      id, label: n.label + ' (копия)',
+      tags: (n.tags||[]).slice(), content: n.content,
+      r: n.r, color: n.color, shape: n.shape, pinned: false,
+      x: n.x + 40, y: n.y + 40, vx: 0, vy: 0
+    };
+    nodes.push(copy);
+    nodeMap[id] = copy;
+    updateVisibility(); updateStats(); buildTagFilter();
+    scheduleSave();
+    selectNode(copy);
+  });
+
+  // Click neighbor
+  panelContent.querySelectorAll('.link-item').forEach(el=>{
+    el.addEventListener('click', e=>{
+      if (e.target.dataset.unlink) return;
+      const target = nodeMap[el.dataset.id];
+      if (target) selectNode(target);
+    });
+  });
+
+  // Unlink
+  panelContent.querySelectorAll('[data-unlink]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = el.dataset.unlink;
+      links = links.filter(l => !(
+        (l.source.id === n.id && l.target.id === id) ||
+        (l.target.id === n.id && l.source.id === id)
+      ));
+      updateStats();
+      scheduleSave();
+      renderPanel();
+    });
+  });
+
+  // Create link
+  const linkSelect = panelContent.querySelector('#linkSelect');
+  if (linkSelect){
+    linkSelect.addEventListener('change', ()=>{
+      const id = linkSelect.value;
+      if (!id) return;
+      const target = nodeMap[id];
+      if (!target) return;
+      const exists = links.some(l =>
+        (l.source === n && l.target === target) || (l.source === target && l.target === n)
+      );
+      if (!exists) links.push({ source: n, target });
+      updateStats();
+      scheduleSave();
+      renderPanel();
+    });
+  }
+
+  // Delete
+  panelContent.querySelector('#deleteBtn').addEventListener('click', ()=>{
+    if (!confirm(`Удалить заметку "${n.label}"?`)) return;
+    links = links.filter(l => l.source !== n && l.target !== n);
+    nodes = nodes.filter(x => x !== n);
+    delete nodeMap[n.id];
+    selected = null;
+    panel.classList.remove('open');
+    updateVisibility(); updateStats(); buildTagFilter();
+    scheduleSave();
+  });
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+document.getElementById('closePanel').addEventListener('click', ()=>{
+  panel.classList.remove('open');
+  selected = null;
+});
+
+/* =========================================================
+   SETTINGS UI
+   ========================================================= */
+const settingsPanel = document.getElementById('settingsPanel');
+function toggleSettings(open){
+  if (open === undefined) settingsPanel.classList.toggle('open');
+  else if (open) settingsPanel.classList.add('open');
+  else settingsPanel.classList.remove('open');
+}
+document.getElementById('settingsBtn').addEventListener('click', ()=>toggleSettings());
+document.getElementById('closeSettings').addEventListener('click', ()=>toggleSettings(false));
+
+// Tabs
+document.querySelectorAll('.settings-tabs .tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.settings-tabs .tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.tab-content[data-tab="${tab.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+// Theme grid
+function buildThemeGrid(){
+  const grid = document.getElementById('themeGrid');
+  grid.innerHTML = Object.entries(THEMES).map(([key, t])=>`
+    <div class="theme-card${settings.theme===key?' active':''}" data-theme="${key}" style="background:${t.colors.base}">
+      <div class="name" style="color:${t.colors.text}">${t.label}</div>
+      <div class="swatches">
+        ${t.palette.map(c=>`<div class="swatch" style="background:${c}"></div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.theme-card').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      settings.theme = el.dataset.theme;
+      applyTheme(settings.theme);
+      buildThemeGrid();
+      buildPalettePicker();
+      saveSettings();
+    });
+  });
+}
+
+// Bind setting controls
+function bindToggle(id, path, onChange){
+  const el = document.getElementById(id);
+  const parts = path.split('.');
+  el.checked = parts.reduce((o,k)=>o[k], settings);
+  el.addEventListener('change', ()=>{
+    let obj = settings;
+    for (let i=0;i<parts.length-1;i++) obj = obj[parts[i]];
+    obj[parts[parts.length-1]] = el.checked;
+    saveSettings();
+    if (onChange) onChange(el.checked);
+  });
+}
+function bindRange(id, valId, path, fmt, onChange){
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(valId);
+  const parts = path.split('.');
+  const cur = parts.reduce((o,k)=>o[k], settings);
+  el.value = cur;
+  valEl.textContent = fmt(cur);
+  el.addEventListener('input', ()=>{
+    const v = parseFloat(el.value);
+    let obj = settings;
+    for (let i=0;i<parts.length-1;i++) obj = obj[parts[i]];
+    obj[parts[parts.length-1]] = v;
+    valEl.textContent = fmt(v);
+    saveSettings();
+    if (onChange) onChange(v);
+  });
+}
+
+bindToggle('setAutoSave', 'behavior.autoSave');
+bindToggle('setAnimate', 'behavior.animate');
+bindToggle('setMinimap', 'behavior.minimap', v=>{
+  document.getElementById('minimap').style.display = v ? '' : 'none';
+});
+
+bindToggle('setPhysicsEnabled', 'physics.enabled');
+bindRange('setRepulsion', 'valRepulsion', 'physics.repulsion', v=>v.toFixed(2));
+bindRange('setLinkDist', 'valLinkDist', 'physics.linkDist', v=>v.toFixed(0));
+bindRange('setLinkStr', 'valLinkStr', 'physics.linkStr', v=>v.toFixed(3));
+bindRange('setDamping', 'valDamping', 'physics.damping', v=>v.toFixed(2));
+bindRange('setCenter', 'valCenter', 'physics.center', v=>v.toFixed(3));
+
+bindToggle('setShowLabels', 'visuals.showLabels');
+bindRange('setLabelSize', 'valLabelSize', 'visuals.labelSize', v=>v.toFixed(0));
+bindRange('setNodeScale', 'valNodeScale', 'visuals.nodeScale', v=>v.toFixed(1));
+bindRange('setLinkWidth', 'valLinkWidth', 'visuals.linkWidth', v=>v.toFixed(1));
+bindToggle('setCurved', 'visuals.curved');
+bindRange('setCurveAmount', 'valCurveAmount', 'visuals.curveAmount', v=>v.toFixed(2));
+bindToggle('setArrows', 'visuals.arrows');
+bindToggle('setGlow', 'visuals.glow');
+bindToggle('setGrid', 'visuals.grid');
+bindToggle('setGridDots', 'visuals.gridDots');
+
+const shapeSelect = document.getElementById('setNodeShape');
+shapeSelect.value = settings.visuals.nodeShape;
+shapeSelect.addEventListener('change', ()=>{
+  settings.visuals.nodeShape = shapeSelect.value;
+  saveSettings();
+});
+
+// Buttons
+document.getElementById('settleBtn').addEventListener('click', settle);
+document.getElementById('resetPhysicsBtn').addEventListener('click', ()=>{
+  Object.assign(settings.physics, DEFAULT_SETTINGS.physics);
+  saveSettings();
+  applySettingsToUI();
+  showToast('Физика сброшена', 'success');
+});
+document.getElementById('clearFilterBtn').addEventListener('click', ()=>{
+  activeTags.clear();
+  buildTagFilter();
+  updateVisibility();
+});
+document.getElementById('resetSettingsBtn').addEventListener('click', ()=>{
+  if (!confirm('Сбросить все настройки?')) return;
+  settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  saveSettings();
+  applyTheme(settings.theme);
+  buildThemeGrid();
+  buildPalettePicker();
+  applySettingsToUI();
+  showToast('Настройки сброшены', 'success');
+});
+document.getElementById('clearAllBtn').addEventListener('click', ()=>{
+  document.getElementById('clearBtn').click();
+});
+document.getElementById('exportBtn2').addEventListener('click', ()=>{
+  document.getElementById('exportBtn').click();
+});
+document.getElementById('importBtn2').addEventListener('click', ()=>{
+  document.getElementById('importBtn').click();
+});
+
+function applySettingsToUI(){
+  const set = (id, v)=>{ const el = document.getElementById(id); if (el) el.checked = v; };
+  const setr = (id, valId, v, fmt)=>{ const el = document.getElementById(id); if (el) el.value = v; const vv = document.getElementById(valId); if (vv) vv.textContent = fmt(v); };
+  set('setAutoSave', settings.behavior.autoSave);
+  set('setAnimate', settings.behavior.animate);
+  set('setMinimap', settings.behavior.minimap);
+  document.getElementById('minimap').style.display = settings.behavior.minimap ? '' : 'none';
+  set('setPhysicsEnabled', settings.physics.enabled);
+  setr('setRepulsion', 'valRepulsion', settings.physics.repulsion, v=>v.toFixed(2));
+  setr('setLinkDist', 'valLinkDist', settings.physics.linkDist, v=>v.toFixed(0));
+  setr('setLinkStr', 'valLinkStr', settings.physics.linkStr, v=>v.toFixed(3));
+  setr('setDamping', 'valDamping', settings.physics.damping, v=>v.toFixed(2));
+  setr('setCenter', 'valCenter', settings.physics.center, v=>v.toFixed(3));
+  set('setShowLabels', settings.visuals.showLabels);
+  setr('setLabelSize', 'valLabelSize', settings.visuals.labelSize, v=>v.toFixed(0));
+  setr('setNodeScale', 'valNodeScale', settings.visuals.nodeScale, v=>v.toFixed(1));
+  setr('setLinkWidth', 'valLinkWidth', settings.visuals.linkWidth, v=>v.toFixed(1));
+  set('setCurved', settings.visuals.curved);
+  setr('setCurveAmount', 'valCurveAmount', settings.visuals.curveAmount, v=>v.toFixed(2));
+  set('setArrows', settings.visuals.arrows);
+  set('setGlow', settings.visuals.glow);
+  set('setGrid', settings.visuals.grid);
+  set('setGridDots', settings.visuals.gridDots);
+  document.getElementById('setNodeShape').value = settings.visuals.nodeShape;
+}
+
+/* =========================================================
+   SEARCH
+   ========================================================= */
+const searchInput = document.getElementById('search');
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if (!q){ searchHighlight = null; return; }
+  const found = nodes.find(n => visibleNodes.has(n) && n.label.toLowerCase().includes(q));
+  if (found){
+    searchHighlight = found;
+    cam.x = -found.x * cam.scale;
+    cam.y = -found.y * cam.scale;
+  } else {
+    searchHighlight = null;
+  }
+});
+
+/* =========================================================
+   ADD NODE
+   ========================================================= */
+document.getElementById('addBtn').addEventListener('click', ()=>{
+  const label = prompt('Название заметки:', 'Новая заметка');
+  if (!label) return;
+  const id = 'n' + Date.now();
+  const newNode = {
+    id, label,
+    tags: ['новая'],
+    content: '',
+    r: 10,
+    color: settings.newColor || currentTheme.palette[0],
+    shape: settings.visuals.nodeShape === 'mixed' ? 'circle' : settings.visuals.nodeShape,
+    pinned: false,
+    x: Math.random()*200-100,
+    y: Math.random()*200-100,
+    vx: 0, vy: 0
+  };
+  nodes.push(newNode);
+  nodeMap[id] = newNode;
+  if (nodes.length > 1){
+    const target = nodes[Math.floor(Math.random() * (nodes.length - 1))];
+    if (target && target !== newNode) links.push({ source: newNode, target });
+  }
+  updateVisibility(); updateStats(); buildTagFilter();
+  scheduleSave();
+  selectNode(newNode);
+});
+
+/* =========================================================
+   RESET VIEW / ZOOM
+   ========================================================= */
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  cam.x = 0; cam.y = 0; cam.scale = 1;
+  scheduleSave();
+});
+function zoomFit(){
+  if (nodes.length === 0) return;
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for (const n of nodes){
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y > maxY) maxY = n.y;
+  }
+  const pad = 60;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const w = maxX - minX, h = maxY - minY;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  const s = Math.min(W/w, H/h, 2);
+  cam.scale = s;
+  cam.x = -(minX + w/2) * s;
+  cam.y = -(minY + h/2) * s;
+  scheduleSave();
+}
+document.getElementById('zoomIn').addEventListener('click', ()=>{
+  cam.scale = Math.min(4, cam.scale * 1.2);
+  scheduleSave();
+});
+document.getElementById('zoomOut').addEventListener('click', ()=>{
+  cam.scale = Math.max(0.15, cam.scale / 1.2);
+  scheduleSave();
+});
+document.getElementById('zoomFit').addEventListener('click', zoomFit);
+
+/* =========================================================
+   EXPORT
+   ========================================================= */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const data = serialize();
+  data.settings = settings;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href = url;
+  a.download = `obsidian-graph-${ts}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  showToast('Файл сохранён', 'success');
+});
+
+/* =========================================================
+   IMPORT
+   ========================================================= */
+const fileInput = document.getElementById('fileInput');
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  fileInput.value = '';
+  fileInput.click();
+});
+fileInput.addEventListener('change', ()=>{
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.settings){
+        settings = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.settings);
+        saveSettings();
+        applyTheme(settings.theme);
+        buildThemeGrid();
+        applySettingsToUI();
+      }
+      if (selected) { selected = null; panel.classList.remove('open'); }
+      applyData(data);
+      saveToLocalStorage();
+      showToast('Загружено: ' + nodes.length + ' заметок', 'success');
+    } catch(e){
+      showToast('Ошибка загрузки: ' + e.message, 'error');
+    }
+  };
+  reader.readAsText(f);
+});
+
+/* =========================================================
+   CLEAR / RESET TO DEMO
+   ========================================================= */
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if (!confirm('Удалить все данные и вернуть демо-граф?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+  selected = null;
+  hoverNode = null;
+  searchHighlight = null;
+  activeTags.clear();
+  panel.classList.remove('open');
+  applyData(JSON.parse(JSON.stringify(DEMO_DATA)));
+  nodes.forEach(n=>{
+    n.x = Math.random()*600-300;
+    n.y = Math.random()*600-300;
+  });
+  buildTagFilter();
+  scheduleSave();
+  showToast('Данные сброшены', 'success');
+});
+
+/* =========================================================
+   FULLSCREEN
+   ========================================================= */
+const fsBtn = document.getElementById('fsBtn');
+fsBtn.addEventListener('click', ()=>{
+  const el = document.documentElement;
+  if (!document.fullscreenElement && !document.webkitFullscreenElement){
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+});
+document.addEventListener('fullscreenchange', ()=>setTimeout(resize, 100));
+document.addEventListener('webkitfullscreenchange', ()=>setTimeout(resize, 100));
+
+/* =========================================================
+   TOAST
+   ========================================================= */
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(msg, type){
+  toastEl.textContent = msg;
+  toastEl.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastEl.className = type || ''; }, 2000);
+}
+
+/* =========================================================
+   KEYBOARD
+   ========================================================= */
+document.addEventListener('keydown', e=>{
+  const inInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.isContentEditable;
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 's'){
+    e.preventDefault();
+    document.getElementById('exportBtn').click();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o'){
+    e.preventDefault();
+    document.getElementById('importBtn').click();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === ','){
+    e.preventDefault();
+    toggleSettings();
+  }
+  if (e.key === 'Escape'){
+    if (ctxMenu.classList.contains('show')) ctxMenu.classList.remove('show');
+    else if (panel.classList.contains('open')){ panel.classList.remove('open'); selected = null; }
+    else if (settingsPanel.classList.contains('open')) toggleSettings(false);
+  }
+  if (inInput) return;
+  if (e.key === '+' || e.key === '='){ e.preventDefault(); cam.scale = Math.min(4, cam.scale * 1.2); scheduleSave(); }
+  if (e.key === '-'){ e.preventDefault(); cam.scale = Math.max(0.15, cam.scale / 1.2); scheduleSave(); }
+  if (e.key === '0'){ e.preventDefault(); cam.x = 0; cam.y = 0; cam.scale = 1; scheduleSave(); }
+  if (e.key === 'f' || e.key === 'F'){ e.preventDefault(); zoomFit(); }
+  if (e.key === 'g' || e.key === 'G'){ e.preventDefault(); settings.visuals.grid = !settings.visuals.grid; saveSettings(); applySettingsToUI(); }
+  if (e.key === 'a' || e.key === 'A'){ e.preventDefault(); document.getElementById('addBtn').click(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selected){
+    e.preventDefault();
+    if (confirm(`Удалить заметку "${selected.label}"?`)){
+      links = links.filter(l => l.source !== selected && l.target !== selected);
+      nodes = nodes.filter(x => x !== selected);
+      delete nodeMap[selected.id];
+      selected = null;
+      panel.classList.remove('open');
+      updateVisibility(); updateStats(); buildTagFilter();
+      scheduleSave();
+    }
+  }
+});
+
+// Save before unload
+window.addEventListener('beforeunload', ()=>{
+  clearTimeout(saveTimeout);
+  if (settings.behavior.autoSave) saveToLocalStorage();
+});
+
+/* =========================================================
+   START
+   ========================================================= */
+(function init(){
+  loadSettings();
+  applyTheme(settings.theme);
+  buildThemeGrid();
+  applySettingsToUI();
+
+  resize();
+  setTimeout(resize, 50);
+  setTimeout(resize, 300);
+
+  const saved = loadFromLocalStorage();
+  if (saved && Array.isArray(saved.nodes) && saved.nodes.length){
+    try {
+      applyData(saved);
+      showToast('Загружено сохранение', 'success');
+    } catch(e){
+      console.warn('Saved data invalid, falling back to demo', e);
+      applyData(JSON.parse(JSON.stringify(DEMO_DATA)));
+      nodes.forEach(n=>{ n.x = Math.random()*600-300; n.y = Math.random()*600-300; });
+    }
+  } else {
+    applyData(JSON.parse(JSON.stringify(DEMO_DATA)));
+    nodes.forEach(n=>{ n.x = Math.random()*600-300; n.y = Math.random()*600-300; });
+    scheduleSave();
+  }
+
+  buildPalettePicker();
+  loop();
+})();
+</script>
+</body>
+</html>
