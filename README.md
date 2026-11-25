@@ -17,6 +17,7 @@ Telegram: @ICEBERG_socializacia
 добавлена реклама форума по OSINT а также данного GitHub аккаунта.
 
 
+
 <img width="1920" height="919" alt="Снимок экрана (116)" src="https://github.com/user-attachments/assets/6dafc7af-9b9c-444c-9c19-03efcb62aca0" />
 
 добавлена версия 2.0
